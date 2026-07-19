@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "checklist-dependency-sorter"
+version = "1.0.0"
+description = "Order checklist tasks by dependency and explain missing links and cycles."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Logan Pendragon Multiverse" }]
+keywords = ["checklist", "dependencies", "topological-sort", "planning"]
+
+[project.scripts]
+checklist-sort = "checklist_sorter.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/loganpendragonmultiverse/checklist-dependency-sorter"
+Issues = "https://github.com/loganpendragonmultiverse/checklist-dependency-sorter/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/checklist_sorter"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
