@@ -52,3 +52,7 @@ python -m build
 **Feature complete for v1.0.** Contributions should keep ordering deterministic and diagnostics specific.
 
 Released under the [MIT License](LICENSE). Contributions follow the [organization guidelines](https://github.com/loganpendragonmultiverse/.github/blob/main/CONTRIBUTING.md).
+
+## More open-source projects
+
+This project is part of the [Logan Pendragon Forge open-source collection](https://www.loganpendragonforge.com/open-source/). Browse the catalog for other released tools, source repositories, live demos, and downloads.
