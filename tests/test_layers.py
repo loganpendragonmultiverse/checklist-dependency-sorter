@@ -56,3 +56,34 @@ def test_cli_layers_and_exit_codes(tmp_path: Path, capsys):
     with pytest.raises(SystemExit) as error:
         main([str(source), "--layers", "--format", "dot"])
     assert error.value.code == 2
+
+
+def test_long_chain_groups_each_task_once():
+    count = 2000
+    tasks = tuple(Task(str(index), "Task", (str(index - 1),) if index else (), index) for index in range(count))
+    result = sort_tasks(tasks)
+    assert result.valid and len(result.layers) == count
+    assert [layer[0].id for layer in result.layers] == [str(index) for index in range(count)]
+    assert all(len(layer) == 1 for layer in result.layers)
+
+
+def test_default_markdown_and_dot_snapshots():
+    result = sort_tasks((Task("ship", "Ship", ("test",), 0), Task("write", "Write", (), 1), Task("test", "Test", ("write",), 2)))
+    assert render(result, "markdown") == "- [ ] write: Write\n- [ ] test: Test\n- [ ] ship: Ship\n"
+    assert render(result, "dot") == ('digraph checklist {\n'
+        '  "write" [label="write: Write"];\n'
+        '  "test" [label="test: Test"];\n'
+        '  "write" -> "test";\n'
+        '  "ship" [label="ship: Ship"];\n'
+        '  "test" -> "ship";\n'
+        '}\n')
+
+
+def test_cli_cycle_exits_one_without_executable_layers(tmp_path: Path, capsys):
+    source = tmp_path / "cycle.json"
+    source.write_text(json.dumps([{"id": "a", "text": "A", "depends_on": ["b"]}, {"id": "b", "text": "B", "depends_on": ["a"]}]))
+    assert main([str(source), "--layers"]) == 1
+    output = capsys.readouterr().out
+    assert "Cycle: a -> b -> a" in output and "Layer 1" not in output
+    assert main([str(source)]) == 1
+    assert "Dependency cycles:" in capsys.readouterr().out

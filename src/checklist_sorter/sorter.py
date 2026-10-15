@@ -106,9 +106,12 @@ def sort_tasks(tasks: tuple[Task, ...]) -> SortResult:
     ordered.extend(task for task in tasks if task.id in unresolved)
     layers = ()
     if not missing and not cycles:
+        tasks_by_depth: dict[int, list[Task]] = {}
+        for task in tasks:
+            tasks_by_depth.setdefault(depths[task.id], []).append(task)
         layers = tuple(
-            tuple(sorted((task for task in tasks if depths[task.id] == depth), key=lambda task: task.source_order))
-            for depth in range(max(depths.values(), default=-1) + 1)
+            tuple(sorted(tasks_by_depth[depth], key=lambda task: task.source_order))
+            for depth in sorted(tasks_by_depth)
         )
     return SortResult(tuple(ordered), tuple(missing), cycles, layers)
 
