@@ -24,6 +24,7 @@ class SortResult:
     ordered: tuple[Task, ...]
     missing: tuple[tuple[str, str], ...]
     cycles: tuple[tuple[str, ...], ...]
+    layers: tuple[tuple[Task, ...], ...] = ()
 
     @property
     def valid(self) -> bool:
@@ -89,9 +90,11 @@ def sort_tasks(tasks: tuple[Task, ...]) -> SortResult:
 
     ready = sorted((task for task in tasks if indegree[task.id] == 0), key=lambda task: task.source_order)
     ordered: list[Task] = []
+    depths: dict[str, int] = {}
     while ready:
         current = ready.pop(0)
         ordered.append(current)
+        depths[current.id] = 1 + max((depths[dependency] for dependency in current.depends_on if dependency in depths), default=-1)
         for child_id in sorted(children[current.id], key=lambda value: by_id[value].source_order):
             indegree[child_id] -= 1
             if indegree[child_id] == 0:
@@ -101,7 +104,13 @@ def sort_tasks(tasks: tuple[Task, ...]) -> SortResult:
     unresolved = {task.id for task in tasks if indegree[task.id] > 0}
     cycles = _find_cycles(by_id, unresolved)
     ordered.extend(task for task in tasks if task.id in unresolved)
-    return SortResult(tuple(ordered), tuple(missing), cycles)
+    layers = ()
+    if not missing and not cycles:
+        layers = tuple(
+            tuple(sorted((task for task in tasks if depths[task.id] == depth), key=lambda task: task.source_order))
+            for depth in range(max(depths.values(), default=-1) + 1)
+        )
+    return SortResult(tuple(ordered), tuple(missing), cycles, layers)
 
 
 def _find_cycles(by_id: dict[str, Task], unresolved: set[str]) -> tuple[tuple[str, ...], ...]:

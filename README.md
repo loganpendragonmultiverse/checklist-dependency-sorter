@@ -49,10 +49,20 @@ python -m build
 
 ## Project status
 
-**Feature complete for v1.0.** Contributions should keep ordering deterministic and diagnostics specific.
+**Feature complete for v1.1.** Contributions should keep ordering deterministic and diagnostics specific.
 
 Released under the [MIT License](LICENSE). Contributions follow the [organization guidelines](https://github.com/loganpendragonmultiverse/.github/blob/main/CONTRIBUTING.md).
 
 ## More open-source projects
 
 This project is part of the [Logan Pendragon Forge open-source collection](https://www.loganpendragonforge.com/open-source/). Browse the catalog for other released tools, source repositories, live demos, and downloads.
+
+## Dependency layers (1.1.0)
+
+Use `checklist-sort tasks.json --layers` or add `--format markdown` / `--format json`.
+A layer groups tasks whose declared prerequisites occur in earlier layers. Tasks in a
+layer retain source order. This is dependency evidence, not a guarantee that tasks can
+safely execute concurrently: undeclared dependencies and shared resources are unknown.
+The ordinary ordered output stays unchanged. Missing references or cycles make layers
+unavailable (exit 1); JSON includes `layers_available: false` and an empty `layers` array.
+DOT remains the existing graph and cannot be combined with `--layers` (exit 2).
