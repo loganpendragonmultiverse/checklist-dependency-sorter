@@ -8,6 +8,7 @@ Python 3.10 or newer is required.
 
 ```bash
 python -m venv .venv
+# Activate .venv with your shell, then:
 python -m pip install -e .
 ```
 
@@ -29,12 +30,15 @@ checklist-sort tasks.json --format markdown --output ordered.md
 checklist-sort tasks.json --format dot --output dependencies.dot
 ```
 
-JSON may be an array or an object with a `tasks` array. Each task needs `id`, `text`, and an optional string array named `depends_on`.
+JSON may be an array or an object with a `tasks` array. Each task needs nonblank string `id` and `text` fields and an optional array of nonblank strings named `depends_on`. JSON may include a boolean `completed` field; omitted means false. Markdown accepts `[ ]`, `[x]` and `[X]`. Checked tasks remain checked in reports; completion does not remove tasks or bypass prerequisites.
 
 ## Output and limitations
 
 - Independent tasks retain their source order whenever dependency rules allow it.
-- Missing dependencies and cycles produce exit code 1; malformed input produces exit code 2.
+- Missing dependencies and cycles produce exit code 1; malformed input and file I/O errors produce exit code 2.
+- `--output` creates a new file only. Existing files, the source input and symlink destinations are refused; choose a new output name. A failed write can leave a partial new report, so inspect that path and use a different name when retrying.
+- Cycle diagnostics give deterministic concrete witnesses, not every possible simple cycle in an overlapping graph. Long cyclic checklists do not depend on the Python recursion limit.
+- Reports are views of the input, not lossless backups: Markdown omits dependency annotations and JSON reports wrap the task array under `ordered`. Keep the original file; use that array as JSON task input if needed.
 - Text, Markdown, JSON, and Graphviz DOT reports are supported.
 - The sorter does not estimate duration, assign people, infer hidden dependencies, or replace a project manager.
 - DOT output is a graph description; rendering it requires Graphviz or another compatible viewer.
@@ -49,7 +53,7 @@ python -m build
 
 ## Project status
 
-**Feature complete for v1.1.** Contributions should keep ordering deterministic and diagnostics specific.
+**Feature complete for v1.1.** Patch 1.1.1 preserves accepted completion marks and hardens validation, output handling and cycle diagnostics. Contributions should keep ordering deterministic and diagnostics specific.
 
 Released under the [MIT License](LICENSE). Contributions follow the [organization guidelines](https://github.com/loganpendragonmultiverse/.github/blob/main/CONTRIBUTING.md).
 

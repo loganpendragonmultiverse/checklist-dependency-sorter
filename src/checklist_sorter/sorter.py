@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -12,10 +13,13 @@ class Task:
     text: str
     depends_on: tuple[str, ...] = ()
     source_order: int = 0
+    completed: bool = False
 
     def to_dict(self) -> dict[str, object]:
         result = asdict(self)
         result["depends_on"] = list(self.depends_on)
+        if not self.completed:
+            result.pop("completed")
         return result
 
 
@@ -42,35 +46,48 @@ def load_tasks(path: Path) -> tuple[Task, ...]:
             raise ValueError("JSON must be an array of tasks or an object with a tasks array")
         tasks = []
         for index, item in enumerate(values):
-            if not isinstance(item, dict) or not item.get("id") or not item.get("text"):
-                raise ValueError(f"Task {index + 1} needs non-empty id and text fields")
+            if (
+                not isinstance(item, dict)
+                or any(not isinstance(item.get(field), str) or not item[field].strip()
+                       for field in ("id", "text"))
+            ):
+                raise ValueError(f"Task {index + 1} needs nonblank string id and text fields")
             dependencies = item.get("depends_on", [])
-            if not isinstance(dependencies, list) or not all(isinstance(value, str) for value in dependencies):
-                raise ValueError(f"Task {item['id']} has an invalid depends_on list")
-            tasks.append(Task(str(item["id"]).strip(), str(item["text"]).strip(), tuple(value.strip() for value in dependencies if value.strip()), index))
+            if not isinstance(dependencies, list) or not all(isinstance(value, str) and value.strip() for value in dependencies):
+                raise ValueError(f"Task {item['id']} depends_on must contain nonblank strings")
+            completed = item.get("completed", False)
+            if not isinstance(completed, bool):
+                raise ValueError(f"Task {item['id']} completed must be a boolean")
+            tasks.append(Task(item["id"].strip(), item["text"].strip(), tuple(value.strip() for value in dependencies), index, completed))
         return _validate_ids(tasks)
     return _parse_markdown(source.read_text(encoding="utf-8-sig"))
 
 
 def _parse_markdown(content: str) -> tuple[Task, ...]:
     tasks = []
-    pattern = re.compile(r"^\s*-\s*\[[ xX]\]\s*([A-Za-z0-9_.-]+)\s*:\s*(.+?)(?:\s*\|\s*after\s*:\s*(.*))?$", re.I)
+    pattern = re.compile(r"^\s*-\s*\[([ xX])\]\s*([A-Za-z0-9_.-]+)\s*:\s*(.+?)(?:\s*\|\s*after\s*:\s*(.*))?$", re.I)
     for line_number, line in enumerate(content.splitlines(), 1):
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         match = pattern.match(line)
         if not match:
             raise ValueError(f"Line {line_number} must use '- [ ] id: text | after: dependency, ...'")
-        dependencies = tuple(value.strip() for value in (match.group(3) or "").split(",") if value.strip())
-        tasks.append(Task(match.group(1), match.group(2).strip(), dependencies, len(tasks)))
+        dependencies = tuple(value.strip() for value in (match.group(4) or "").split(",") if value.strip())
+        tasks.append(Task(match.group(2), match.group(3).strip(), dependencies, len(tasks), match.group(1).casefold() == "x"))
     if not tasks:
         raise ValueError("No checklist tasks were found")
     return _validate_ids(tasks)
 
 
-def _validate_ids(tasks: list[Task]) -> tuple[Task, ...]:
+def _validate_ids(tasks: list[Task] | tuple[Task, ...]) -> tuple[Task, ...]:
     seen: set[str] = set()
     for task in tasks:
+        if any(not isinstance(value, str) or not value.strip() for value in (task.id, task.text)):
+            raise ValueError("Task IDs and text must be nonblank strings")
+        if any(not isinstance(value, str) or not value.strip() for value in task.depends_on):
+            raise ValueError(f"Task {task.id} depends_on must contain nonblank strings")
+        if not isinstance(task.completed, bool):
+            raise ValueError(f"Task {task.id} completed must be a boolean")
         if task.id in seen:
             raise ValueError(f"Duplicate task id: {task.id}")
         seen.add(task.id)
@@ -78,6 +95,7 @@ def _validate_ids(tasks: list[Task]) -> tuple[Task, ...]:
 
 
 def sort_tasks(tasks: tuple[Task, ...]) -> SortResult:
+    _validate_ids(tasks)
     by_id = {task.id: task for task in tasks}
     missing = sorted((task.id, dependency) for task in tasks for dependency in task.depends_on if dependency not in by_id)
     indegree = {task.id: 0 for task in tasks}
@@ -117,27 +135,32 @@ def sort_tasks(tasks: tuple[Task, ...]) -> SortResult:
 
 
 def _find_cycles(by_id: dict[str, Task], unresolved: set[str]) -> tuple[tuple[str, ...], ...]:
+    """Return deterministic concrete cycle witnesses without recursive traversal.
+
+    Back edges identify cycles; the result is not an enumeration of every possible
+    simple cycle in an overlapping graph. Each node/edge is traversed once.
+    """
     cycles: set[tuple[str, ...]] = set()
+    finished: set[str] = set()
     for start in sorted(unresolved):
-        path: list[str] = []
-        positions: dict[str, int] = {}
-
-        def visit(node: str) -> None:
-            if node in positions:
-                cycle = path[positions[node] :] + [node]
-                body = cycle[:-1]
-                rotations = [tuple(body[index:] + body[:index]) for index in range(len(body))]
-                canonical = min(rotations)
+        if start in finished:
+            continue
+        path = [start]
+        positions = {start: 0}
+        stack: list[Iterator[str]] = [iter(by_id[start].depends_on)]
+        while stack:
+            dependency = next(stack[-1], None)
+            if dependency is None:
+                finished.add(path.pop())
+                positions.popitem()
+                stack.pop()
+            elif dependency in positions:
+                body = path[positions[dependency]:]
+                first = body.index(min(body))
+                canonical = tuple(body[first:] + body[:first])
                 cycles.add(canonical + (canonical[0],))
-                return
-            if node not in unresolved:
-                return
-            positions[node] = len(path)
-            path.append(node)
-            for dependency in by_id[node].depends_on:
-                visit(dependency)
-            path.pop()
-            positions.pop(node)
-
-        visit(start)
+            elif dependency in unresolved and dependency not in finished:
+                positions[dependency] = len(path)
+                path.append(dependency)
+                stack.append(iter(by_id[dependency].depends_on))
     return tuple(sorted(cycles))
