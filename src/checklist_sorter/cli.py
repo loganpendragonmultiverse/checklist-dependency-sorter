@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -19,15 +20,20 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--layers supports text, markdown and json; DOT output remains the existing dependency graph")
     try:
         result = sort_tasks(load_tasks(args.checklist))
+        report = render(result, args.format, layers=args.layers)
+        if args.output:
+            destination = args.output.expanduser()
+            # Windows exclusive-open may follow an existing dangling symlink.
+            if os.path.lexists(destination):
+                raise FileExistsError(f"Output already exists: {destination}")
+            with destination.open("x", encoding="utf-8", newline="\n") as output:
+                output.write(report)
+            print(f"Wrote {args.format} report to {args.output}")
+        else:
+            print(report, end="")
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"checklist-sort: {exc}", file=sys.stderr)
         return 2
-    report = render(result, args.format, layers=args.layers)
-    if args.output:
-        args.output.write_text(report, encoding="utf-8")
-        print(f"Wrote {args.format} report to {args.output}")
-    else:
-        print(report, end="")
     return 0 if result.valid else 1
 
 
@@ -39,12 +45,11 @@ def render(result: SortResult, format_name: str, *, layers: bool = False) -> str
     if format_name == "dot":
         lines = ["digraph checklist {"]
         for task in result.ordered:
-            lines.append(f'  "{_dot(task.id)}" [label="{_dot(task.id + ": " + task.text)}"];')
+            lines.append(f'  "{_dot(task.id)}" [label="{_dot(("[x] " if task.completed else "") + task.id + ": " + task.text)}"];')
             for dependency in task.depends_on:
                 lines.append(f'  "{_dot(dependency)}" -> "{_dot(task.id)}";')
         return "\n".join(lines + ["}", ""])
-    prefix = "- [ ] " if format_name == "markdown" else ""
-    lines = [f"{prefix}{task.id}: {task.text}" for task in result.ordered]
+    lines = [f"{_prefix(task.completed, format_name)}{task.id}: {task.text}" for task in result.ordered]
     if result.missing:
         lines.extend(("", "Missing dependencies:", *(f"- {task} depends on unknown task {dependency}" for task, dependency in result.missing)))
     if result.cycles:
@@ -58,12 +63,11 @@ def render_layers(result: SortResult, format_name: str) -> str:
         payload["layers_available"] = result.valid
         payload["layers"] = [[task.to_dict() for task in layer] for layer in result.layers] if result.valid else []
         return json.dumps(payload, indent=2) + "\n"
-    prefix = "- [ ] " if format_name == "markdown" else ""
     lines: list[str] = []
     if result.valid:
         for index, layer in enumerate(result.layers, 1):
             lines.append(("## " if format_name == "markdown" else "") + f"Layer {index}")
-            lines.extend(f"{prefix}{task.id}: {task.text}" for task in layer)
+            lines.extend(f"{_prefix(task.completed, format_name)}{task.id}: {task.text}" for task in layer)
             lines.append("")
         if not result.layers:
             lines.append("No tasks.")
@@ -74,8 +78,14 @@ def render_layers(result: SortResult, format_name: str) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _prefix(completed: bool, format_name: str) -> str:
+    if format_name == "markdown":
+        return "- [x] " if completed else "- [ ] "
+    return "[x] " if completed else ""
+
+
 def _dot(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\r", "\\r").replace("\n", "\\n")
 
 
 if __name__ == "__main__":
