@@ -1,5 +1,9 @@
 # Checklist Dependency Sorter
 
+## Gold Star project
+
+Reviewed for v1.1.1 on October 18, 2026. Declared dependency ordering, missing-reference and cycle diagnostics, optional prerequisite layers, and protected report output.
+
 Checklist Dependency Sorter turns an unordered task list into a stable, dependency-respecting sequence. It also names missing task references and prints concrete cycle paths instead of returning a vague sorting error.
 
 ## Install
