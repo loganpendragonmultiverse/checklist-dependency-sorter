@@ -53,7 +53,11 @@ python -m build
 
 ## Project status
 
-**Feature complete for v1.1.** Patch 1.1.1 preserves accepted completion marks and hardens validation, output handling and cycle diagnostics. Contributions should keep ordering deterministic and diagnostics specific.
+**Feature complete for v1.1.** Contributions should keep ordering deterministic and diagnostics specific.
+
+### 1.1.1 — October 18, 2026
+
+Preserve checked tasks, protect source files and existing reports, validate task fields and diagnose long cycles without recursive traversal. Ordinary unchecked output and dependency-layer behavior stay compatible.
 
 Released under the [MIT License](LICENSE). Contributions follow the [organization guidelines](https://github.com/loganpendragonmultiverse/.github/blob/main/CONTRIBUTING.md).
 
