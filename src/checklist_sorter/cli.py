@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -21,8 +22,11 @@ def main(argv: list[str] | None = None) -> int:
         result = sort_tasks(load_tasks(args.checklist))
         report = render(result, args.format, layers=args.layers)
         if args.output:
-            # Exclusive creation also refuses input aliases and dangling symlinks.
-            with args.output.expanduser().open("x", encoding="utf-8", newline="\n") as output:
+            destination = args.output.expanduser()
+            # Windows exclusive-open may follow an existing dangling symlink.
+            if os.path.lexists(destination):
+                raise FileExistsError(f"Output already exists: {destination}")
+            with destination.open("x", encoding="utf-8", newline="\n") as output:
                 output.write(report)
             print(f"Wrote {args.format} report to {args.output}")
         else:

@@ -118,3 +118,23 @@ def test_dot_escapes_multiline_json_labels():
     dot = render(result, "dot")
     assert '"line\\nbreak"' in dot
     assert 'A \\"quote\\"\\nNext line' in dot
+
+
+def test_dangling_symlink_is_refused_before_any_write_open(tmp_path, monkeypatch):
+    source = tmp_path / "tasks.md"
+    source.write_text("- [ ] a: Task\n")
+    link = tmp_path / "dangling.md"
+    try:
+        link.symlink_to(tmp_path / "absent.md")
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlinks unavailable for this account")
+    original_open = Path.open
+
+    def observe_open(self, mode="r", *args, **kwargs):
+        if self == link and mode == "x":
+            raise AssertionError("Existing dangling links must be refused before open")
+        return original_open(self, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", observe_open)
+    assert main([str(source), "--output", str(link)]) == 2
+    assert not (tmp_path / "absent.md").exists()
